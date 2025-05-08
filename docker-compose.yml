@@ -1,0 +1,114 @@
+# ONF WP 1.0.0 - Simple, Objective, Powerful Local WordPress Development
+# Project name derived from directory. Uses verified 'latest' tags. Includes Adminer.
+
+services:
+  mariadb:
+    image: wodby/mariadb:11.4 # Wodby's latest build for the MariaDB 11.4 series
+    container_name: "${COMPOSE_PROJECT_NAME}_mariadb"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      MYSQL_DATABASE: "${COMPOSE_PROJECT_NAME:-onf_wp_db}"
+      MYSQL_USER: "${COMPOSE_PROJECT_NAME:-onf_wp_user}"
+      MYSQL_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_user}" # Simple, project-scoped for local dev
+      MYSQL_ROOT_PASSWORD: "localdevrootpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_db}"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "--user=${COMPOSE_PROJECT_NAME:-onf_wp_user}", "--password=localdevpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  php:
+    image: wodby/wordpress:latest # Wodby's overall latest stable WordPress (WP6 on recent PHP)
+    container_name: "${COMPOSE_PROJECT_NAME}_php"
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy # Ensures MariaDB is ready before PHP tries to connect
+    environment:
+      DB_HOST: mariadb
+      DB_NAME: "${COMPOSE_PROJECT_NAME:-onf_wp_db}"
+      DB_USER: "${COMPOSE_PROJECT_NAME:-onf_wp_user}"
+      DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_user}"
+      PHP_FPM_USER: wodby # Standard user in Wodby PHP images
+      PHP_FPM_GROUP: wodby
+      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Unique table prefix per project
+      # Email sending not configured
+    volumes:
+      - ./:/var/www/html:cached # Mount current directory (project root) for WordPress files
+
+  nginx:
+    image: wodby/nginx:latest # Wodby's overall latest stable Nginx
+    container_name: "${COMPOSE_PROJECT_NAME}_nginx"
+    restart: unless-stopped
+    depends_on:
+      - php
+    environment:
+      NGINX_VHOST_PRESET: wordpress # Optimized Nginx configuration for WordPress
+      NGINX_BACKEND_HOST: php # PHP-FPM service name
+      NGINX_SERVER_ROOT: /var/www/html # Document root, matches PHP's volume mount
+    volumes:
+      - ./:/var/www/html:cached # Nginx also needs access to static files
+    labels:
+      - "traefik.enable=true"
+      # Explicitly define router and service for Nginx via Traefik
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_router.rule=Host(`${PROJECT_DOMAIN}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_router.entrypoints=web"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_router.service=${COMPOSE_PROJECT_NAME}_nginx_service"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}_nginx_service.loadbalancer.server.port=80" # Nginx container port
+
+  crond:
+    image: wodby/wordpress:latest # Matches PHP service for WP-CLI compatibility and latest WordPress
+    container_name: "${COMPOSE_PROJECT_NAME}_crond"
+    init: true # Use an init process to manage crond properly
+    restart: unless-stopped
+    depends_on:
+      - php # WordPress files and DB connection must be available
+    environment:
+      CRONTAB_SCHEDULE: "0 * * * *" # Default is hourly
+      CRONTAB_COMMAND: "wp cron event run --due-now --path=/var/www/html"
+      DB_HOST: mariadb # For wp-cli database access
+      DB_NAME: "${COMPOSE_PROJECT_NAME:-onf_wp_db}"
+      DB_USER: "${COMPOSE_PROJECT_NAME:-onf_wp_user}"
+      DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_user}"
+    volumes:
+      - ./:/var/www/html:cached # Mount the WordPress codebase for wp-cli access
+    command: sudo crond -f -L /dev/stdout # Run crond in foreground, log to Docker logs
+
+  adminer:
+    image: wodby/adminer:latest # Wodby's Adminer image for database GUI
+    container_name: "${COMPOSE_PROJECT_NAME}_adminer"
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_DB_DRIVER: mysql # Set driver type
+      ADMINER_DEFAULT_DB_HOST: mariadb # Default server points to MariaDB service
+      ADMINER_DEFAULT_DB_NAME: "${COMPOSE_PROJECT_NAME:-onf_wp_db}" # Pre-fill default DB name
+    labels:
+      - "traefik.enable=true"
+      # Define router and service for Adminer via Traefik
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_adminer_router.rule=Host(`db.${PROJECT_DOMAIN}`)" # Access via db.yourdomain.tld
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_adminer_router.entrypoints=web"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_adminer_router.service=${COMPOSE_PROJECT_NAME}_adminer_service"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}_adminer_service.loadbalancer.server.port=80" # Adminer runs on port 80 internally
+
+  traefik:
+    image: traefik:v3.0 # Specific stable version for Traefik for predictability
+    container_name: "${COMPOSE_PROJECT_NAME}_traefik"
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true" # Enable Traefik dashboard (local dev only)
+      - "--providers.docker=true" # Listen to Docker events
+      - "--providers.docker.exposedbydefault=false" # Only expose services explicitly labeled
+      - "--entrypoints.web.address=:80" # Define 'web' entrypoint (HTTP)
+    ports:
+      - "${TRAEFIK_HTTP_PORT}:80" # Main HTTP traffic for the project
+      - "${TRAEFIK_WEBUI_PORT}:8080" # Traefik dashboard, accessible on localhost
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Allow Traefik to access Docker socket (read-only)
+
+volumes:
+  mariadb_data: # Stores MariaDB data persistently for this project
+    driver: local
