@@ -24,21 +24,34 @@ services:
   php:
     image: wodby/wordpress:latest # Wodby's overall latest stable WordPress (WP6 on recent PHP)
     container_name: "${COMPOSE_PROJECT_NAME}_php"
+    # Override entrypoint to run our setup script first
+    # The script should end with `exec "$@"` to run the original command
+    entrypoint: ["/var/www/html/onf-wp-entrypoint.sh"]
+    # The default command from wodby/wordpress image will be passed as arguments to the entrypoint
+    # Ensure the script is executable (Docker usually handles this for entrypoints)
     restart: unless-stopped
     depends_on:
       mariadb:
         condition: service_healthy # Ensures MariaDB is ready before PHP tries to connect
     environment:
       DB_HOST: mariadb
+      WORDPRESS_DB_HOST: mariadb # For getenv('WORDPRESS_DB_HOST') in wp-config
       DB_NAME: "${COMPOSE_PROJECT_NAME:-onf_wp_db}"
       DB_USER: "${COMPOSE_PROJECT_NAME:-onf_wp_user}"
       DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_user}"
+      WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_user}" # For getenv('WORDPRESS_DB_PASSWORD')
       PHP_FPM_USER: wodby # Standard user in Wodby PHP images
       PHP_FPM_GROUP: wodby
       WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Unique table prefix per project
-      # Email sending not configured
+      # HTTPS specific vars for pre-configured wp-config.php
+      PROJECT_DOMAIN: "${PROJECT_DOMAIN}" # Pass PROJECT_DOMAIN from .env
+      WORDPRESS_SITE_URL: "https://${PROJECT_DOMAIN}" # For getenv('WORDPRESS_SITE_URL') in wp-config (consistency)
+      WORDPRESS_HOME_URL: "https://${PROJECT_DOMAIN}" # For getenv('WORDPRESS_HOME_URL') (consistency)
+      WORDPRESS_TRUST_X_FORWARDED_PROTO: "true" # Still good practice
     volumes:
       - ./:/var/www/html:cached # Mount current directory (project root) for WordPress files
+      # Mount the entrypoint script (ensure it's executable on host or via Docker)
+      - ./onf-wp-entrypoint.sh:/var/www/html/onf-wp-entrypoint.sh:ro
 
   nginx:
     image: wodby/nginx:latest # Wodby's overall latest stable Nginx
