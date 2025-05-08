@@ -1,0 +1,91 @@
+<?php
+/**
+ * ONF WP Configuration - HTTPS Enabled Sample
+ *
+ * Before first 'docker compose up -d':
+ * 1. Rename this file to wp-config.php
+ * 2. Generate new secret keys from: https://api.wordpress.org/secret-key/1.1/salt/
+ * 3. Paste the new keys below, replacing the 'put your unique phrase here' lines.
+ * 4. Ensure your .env file has PROJECT_DOMAIN set (e.g., PROJECT_DOMAIN=abcsteps.com)
+ */
+
+// ** Database settings - Pulled from environment variables set in docker-compose.yml ** //
+// These environment variables are made available to the PHP container by docker-compose.
+define( 'DB_NAME', getenv('COMPOSE_PROJECT_NAME') ?: 'onf_wp_db' ); // Uses Docker Compose project name
+define( 'DB_USER', getenv('COMPOSE_PROJECT_NAME') ?: 'onf_wp_user' ); // Uses Docker Compose project name
+define( 'DB_PASSWORD', getenv('WORDPRESS_DB_PASSWORD') ?: 'localdevpassword' ); // Must match var in docker-compose
+define( 'DB_HOST', getenv('WORDPRESS_DB_HOST') ?: 'mariadb' ); // Must match var in docker-compose
+define( 'DB_CHARSET', 'utf8' );
+define( 'DB_COLLATE', '' );
+
+/**#@+
+ * Authentication unique keys and salts.
+ * Replace these with your generated keys!
+ * Generate these using the {@link https://api.wordpress.org/secret-key/1.1/salt/ WordPress.org secret-key service}.
+ */
+define('AUTH_KEY',         'put your unique phrase here');
+define('SECURE_AUTH_KEY',  'put your unique phrase here');
+define('LOGGED_IN_KEY',    'put your unique phrase here');
+define('NONCE_KEY',        'put your unique phrase here');
+define('AUTH_SALT',        'put your unique phrase here');
+define('SECURE_AUTH_SALT', 'put your unique phrase here');
+define('LOGGED_IN_SALT',   'put your unique phrase here');
+define('NONCE_SALT',       'put your unique phrase here');
+/**#@-*/
+
+/**
+ * WordPress database table prefix.
+ */
+// Pulled from environment variable set in docker-compose.yml
+$table_prefix = getenv('WORDPRESS_TABLE_PREFIX') ?: 'wp_';
+
+/**
+ * For developers: WordPress debugging mode.
+ */
+define( 'WP_DEBUG', false );
+
+/* Add any custom values between this line and the "stop editing" line. */
+
+// --- ONF WP HTTPS Configuration ---
+// Handles HTTPS termination at proxies like Cloudflare Tunnel + Traefik
+// Relies on PROJECT_DOMAIN being passed as an environment variable to the PHP container.
+$project_domain_env = getenv('PROJECT_DOMAIN');
+
+if ($project_domain_env) {
+    define('WP_HOME', 'https://' . $project_domain_env);
+    define('WP_SITEURL', 'https://' . $project_domain_env);
+} else {
+    // Fallback if PROJECT_DOMAIN is somehow not set (should come from .env via docker-compose)
+    // Ensure PROJECT_DOMAIN is in your .env and passed to the php service environment
+    error_log('Warning: PROJECT_DOMAIN environment variable not set in wp-config.php');
+    define('WP_HOME', 'https://your-project.localhost'); // Provide a generic fallback
+    define('WP_SITEURL', 'https://your-project.localhost');
+}
+
+// Ensure WordPress interprets the connection as HTTPS
+// This is crucial when SSL is terminated at the proxy.
+if (defined('WP_SITEURL') && strpos(WP_SITEURL, 'https://') === 0) {
+    // Force HTTPS detection based on the defined SITEURL
+    $_SERVER['HTTPS'] = 'on';
+}
+// As a secondary check, trust the X-Forwarded-Proto header if present
+// This is useful if the above didn't trigger and the header exists
+elseif (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos(strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']), 'https') !== false) {
+    $_SERVER['HTTPS'] = 'on';
+}
+// --- End ONF WP HTTPS Configuration ---
+
+/** Docker: Allow direct file system operations for updates/installs */
+define('FS_METHOD', 'direct');
+
+/* That's all, stop editing! Happy publishing. */
+
+/** Absolute path to the WordPress directory. */
+if ( ! defined( 'ABSPATH' ) ) {
+	define( 'ABSPATH', __DIR__ . '/' );
+}
+
+/** Sets up WordPress vars and included files. */
+require_once ABSPATH . 'wp-settings.php';
+
+?> 
