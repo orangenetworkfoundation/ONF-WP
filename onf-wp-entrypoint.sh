@@ -14,42 +14,28 @@ if [ ! -f "$WP_CONFIG_PATH" ] && [ -f "$WP_CONFIG_SAMPLE_PATH" ]; then
 
   # Fetch new salts from WordPress.org API
   echo "Fetching new salts..."
-  # Added timeout and retry mechanism for curl
-  SALTS=$(curl -s --connect-timeout 5 --retry 3 --retry-delay 2 https://api.wordpress.org/secret-key/1.1/salt/)
+  SALTS_OUTPUT=$(curl -s --connect-timeout 5 --retry 3 --retry-delay 2 https://api.wordpress.org/secret-key/1.1/salt/)
+  CURL_EXIT_CODE=$?
 
-  if [ -z "$SALTS" ]; then
-    echo "Error: Could not fetch salts from WordPress.org API after retries." >&2
-    echo "Please ensure the container has internet access." >&2
+  if [ $CURL_EXIT_CODE -ne 0 ] || [ -z "$SALTS_OUTPUT" ]; then
+    echo "Error: Could not fetch salts from WordPress.org API (curl exit code: $CURL_EXIT_CODE)." >&2
+    echo "Please ensure the container has internet access and the API is reachable." >&2
     echo "Continuing without replacing salts - using placeholders (INSECURE)." >&2
   else
     echo "Fetched salts successfully."
     # Use awk to replace the placeholder block with the fetched salts
-    # This is safer than sed for multi-line replacement with special characters
-    awk -v salts="$SALTS" '
-      BEGIN { printing = 1 }
-      /define\(\'AUTH_KEY\',/ { # Match start of salts block more reliably
-        if (printing) {
-          print salts
-          printing = 0
-        }
-      }
-      /\/\*\*#@-\*\// { # Match end of salts block
-        printing = 1
-        next # Skip the end comment line itself
-      }
-      { if (printing) print }
-    ' "$WP_CONFIG_PATH" > "$WP_CONFIG_PATH.tmp" && mv "$WP_CONFIG_PATH.tmp" "$WP_CONFIG_PATH"
+    # Single-line awk script for shell robustness
+    awk -v salts="$SALTS_OUTPUT" 'BEGIN { printing = 1 } /define\(\\'AUTH_KEY\\\',/ { if (printing) { print salts; printing = 0 } } /\/\*\*#@-\*\// { printing = 1; next } { if (printing) print }' "$WP_CONFIG_PATH" > "$WP_CONFIG_PATH.tmp" && mv "$WP_CONFIG_PATH.tmp" "$WP_CONFIG_PATH"
 
-    if [ $? -eq 0 ]; then
+    MV_EXIT_CODE=$?
+    if [ $MV_EXIT_CODE -eq 0 ]; then
         echo "Replaced salt placeholders in $WP_CONFIG_PATH."
     else
-        echo "Error: Failed to replace salts in $WP_CONFIG_PATH." >&2
-        # Consider removing the potentially broken wp-config.php? It might be better to leave it with placeholders.
+        echo "Error: Failed to replace salts in $WP_CONFIG_PATH (mv exit code: $MV_EXIT_CODE)." >&2
     fi
   fi
 
   # Set permissions appropriate for wodby user/group which runs php-fpm
-  # This might be necessary as the file is created by root initially in the script
   chown wodby:wodby "$WP_CONFIG_PATH"
   chmod 640 "$WP_CONFIG_PATH" # Restrict permissions slightly
 

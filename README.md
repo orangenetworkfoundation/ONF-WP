@@ -45,6 +45,7 @@ This setup automatically configures WordPress with secure keys and HTTPS support
     *   Save and close `.env`.
 
 4.  **Launch!**
+    *   **Line Endings Note (Important for `onf-wp-entrypoint.sh`):** If you are on Windows, ensure the `onf-wp-entrypoint.sh` file uses LF (Unix-style) line endings, not CRLF (Windows-style). Most text editors (like VS Code) allow you to change this. Incorrect line endings can cause the PHP container to fail to start due to shell script errors. If you cloned the repository using Git on Windows, your Git client should ideally be configured to handle this automatically for `.sh` files (e.g., `core.autocrlf input` or by checking out with LF line endings).
     *   **Clean Start:** Ensure no old `wp-config.php` or WordPress core files exist in this folder if you previously ran ONF-WP here. Only `.env` (that you created), `docker-compose.yml`, `wp-config-onf-sample.php`, and `onf-wp-entrypoint.sh` should be present initially (besides `README`/`LICENSE`, `.env.example`, `.gitignore` and `.git` if cloned).
     *   Make sure you are inside your project folder (`my-onf-site`) in your terminal.
     *   Run:
@@ -111,6 +112,7 @@ Run these from your project folder in the terminal:
     *   Nginx: `docker compose exec nginx sh`
 
 ## Important Considerations & Best Practices
+*   **Script Line Endings (`onf-wp-entrypoint.sh`):** As mentioned in the Quick Start, ensure this script uses LF (Unix) line endings. CRLF (Windows) line endings will cause errors.
 *   **`.gitignore`:** Create a `.gitignore` file in your project root and add `wp-config.php` and potentially `.env` to it, to prevent accidentally committing sensitive information.
 *   **Secret Keys:** Automatically generated on first run. If you need to invalidate sessions later, you can manually edit `wp-config.php` and generate new keys.
 *   **HTTPS Access:** Accessing your site via `https://<YOUR_PROJECT_DOMAIN>` is recommended, especially if using Cloudflare Tunnel. Be aware of potential browser warnings for self-signed certificates on `.localhost` domains.
