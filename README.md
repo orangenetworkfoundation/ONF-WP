@@ -486,9 +486,9 @@ Orange Network Foundation is a Not-for-Profit Trust registered in New Delhi, Ind
 
 Our focus is on creating and promoting **"Made in India, Made for the World"** open-source projects. We believe in the power of open collaboration to build high-quality, accessible technology.
 
-**Our Mission:** To reduce complexity in technology and make real-world, production-ready solutions accessible to the mass public – including students, developers, small businesses, and lifelong learners. We aim to empower individuals and communities through practical, reliable, and open-source software.
+Our Mission: To reduce complexity in technology and make real-world, production-ready solutions accessible to the mass public – including students, developers, small businesses, and lifelong learners. We aim to empower individuals and communities through practical, reliable, and open-source software.
 
-ONF-WP is a testament to this mission, designed to simplify a crucial part of the web development workflow.
+ONF-WP is a testament to this mission, designed to simplify a crucial part of the web development workflow. Special thanks to Hon. Col. Parvati Jangid, President of Orange Network Foundation, for this initiative.
 
 Find out more about our initiatives: [Orange Network Foundation Official Website](https://orangenetwork.foundation).
 
