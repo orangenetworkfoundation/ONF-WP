@@ -32,7 +32,9 @@ services:
       mariadb:
         condition: service_healthy
     environment:
+      # DEBUG: "1" # Enable debug mode for Wodby scripts
       COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME}" # Pass for wp-config and entrypoint if needed
+      TRAEFIK_HTTPS_PORT: "${TRAEFIK_HTTPS_PORT}" # Pass Traefik HTTPS port for correct URL generation
       DB_HOST: mariadb
       WORDPRESS_DB_HOST: mariadb
       DB_NAME: "${COMPOSE_PROJECT_NAME}"
@@ -43,7 +45,7 @@ services:
       WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
       PHP_FPM_USER: wodby
       PHP_FPM_GROUP: wodby
-      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME:0:10}_" # Max 10 chars from project name for prefix part
+      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Use full project name for prefix
       PROJECT_DOMAIN: "${PROJECT_DOMAIN}"
       WORDPRESS_SITE_URL: "https://${PROJECT_DOMAIN}"
       WORDPRESS_HOME_URL: "https://${PROJECT_DOMAIN}"
@@ -67,20 +69,17 @@ services:
       - ./wordpress:/var/www/html:cached
     labels:
       - "traefik.enable=true"
-      # HTTP Router (redirects to HTTPS)
+      # HTTP Router (No longer redirects, serves directly)
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_http_router.rule=Host(`${PROJECT_DOMAIN}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_http_router.entrypoints=web"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_http_router.middlewares=${COMPOSE_PROJECT_NAME}_redirect_to_https"
-      # HTTPS Router
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_http_router.service=${COMPOSE_PROJECT_NAME}_nginx_service"
+      # HTTPS Router (Remains for direct access via HTTPS port if needed, or can be removed if CF is sole HTTPS source)
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.rule=Host(`${PROJECT_DOMAIN}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.tls=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.service=${COMPOSE_PROJECT_NAME}_nginx_service"
       # Service definition (Nginx internal port)
       - "traefik.http.services.${COMPOSE_PROJECT_NAME}_nginx_service.loadbalancer.server.port=80"
-      # Middleware for HTTP to HTTPS redirection
-      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}_redirect_to_https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}_redirect_to_https.redirectscheme.permanent=true"
 
   wpcli:
     image: wordpress:cli # Official WordPress CLI image
@@ -96,7 +95,7 @@ services:
       WORDPRESS_DB_USER: "${COMPOSE_PROJECT_NAME}"
       WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
       # WP-CLI needs to know the table prefix if it's custom
-      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME:0:10}_"
+      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Use full project name for prefix
     volumes:
       - ./wordpress:/var/www/html # Mount WordPress files
     # Keep container running. User will exec into it.
@@ -108,6 +107,7 @@ services:
     image: wodby/wordpress:latest # Matches PHP service for WP-CLI compatibility
     container_name: "${COMPOSE_PROJECT_NAME}_crond"
     init: true
+    entrypoint: ["sudo", "crond", "-f", "-L", "/dev/stdout"] # Bypass Wodby WP setup logic
     restart: unless-stopped
     depends_on:
       mariadb:
@@ -125,10 +125,10 @@ services:
       WORDPRESS_DB_USER: "${COMPOSE_PROJECT_NAME}"
       DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
       WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
-      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME:0:10}_"
+      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Use full project name for prefix
     volumes:
       - ./wordpress:/var/www/html:cached
-    command: sudo crond -f -L /dev/stdout
+    # command: sudo crond -f -L /dev/stdout # This is now part of the entrypoint
 
   adminer:
     image: wodby/adminer:latest

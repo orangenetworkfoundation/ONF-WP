@@ -32,6 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Revised WP-CLI usage examples to use the new `wpcli` service.
   - Significantly updated the "Understanding How ONF-WP Works" section to accurately describe all services (including new `wpcli` and `adminer`) and their roles in the v1.0.3 architecture.
 
+### Fixed
+- **PHP Container Stability:** Resolved persistent restart loops in the `php` container by:
+  - Modifying `onf-wp-entrypoint.sh` to directly execute `docker-php-entrypoint php-fpm -F` after its custom WordPress setup logic, bypassing the full Wodby parent entrypoint which seemed to cause conflicts.
+  - Ensuring WordPress core files are downloaded correctly if missing (e.g., after a volume clean) by adding `wp core download` logic with increased PHP memory (`php -d memory_limit=512M`) to `onf-wp-entrypoint.sh`.
+  - Refining file permission handling in `onf-wp-entrypoint.sh` (using `chown` with warnings for bind mount limitations and `find ... -exec chmod ...`) to be more robust and allow PHP-FPM (running as root) to operate correctly.
+- **Cloudflare Tunnel Compatibility:**
+  - Adjusted `wp-config-onf-sample.php` (`WP_HOME`, `WP_SITEURL` to `https://...`) and Traefik labels in `docker-compose.yml` (serving HTTP directly on `web` entrypoint) to correctly handle HTTPS termination at Cloudflare, resolving mixed content issues.
+  - Ensured `$_SERVER['HTTPS'] = 'on'` is correctly set in `wp-config.php` by prioritizing `HTTP_X_FORWARDED_PROTO`.
+- **WordPress Table Prefix Sanitization:**
+  - Updated `wp-config-onf-sample.php` to sanitize the `WORDPRESS_TABLE_PREFIX` environment variable (derived from `COMPOSE_PROJECT_NAME`), replacing hyphens with underscores to prevent WordPress installation errors (e.g., "Error: $table_prefix in wp-config.php can only contain numbers, letters, and underscores.").
+- **Crond Service Entrypoint:** Modified `crond` service in `docker-compose.yml` to use a direct entrypoint (`sudo crond -f -L /dev/stdout`) to prevent it from running unnecessary WordPress setup logic from the Wodby image.
+
 ### Removed
 - Automated WordPress installation via admin credentials in `.env` (superseded by 5-minute web install).
 - Logic related to automated admin user creation from `onf-wp-entrypoint.sh` (no longer needed).

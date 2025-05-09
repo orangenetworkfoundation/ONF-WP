@@ -111,6 +111,7 @@ While various tools for local WordPress development exist (e.g., Local by Flywhe
 *   **Adminer Access Documented:** Guidance on accessing the Adminer database management tool.
 *   **Clearer Path Descriptions:** Updated explanations for file paths within the Docker containers.
 *   **Improved `docker-compose.yml`:** More robust service definitions, unique volume naming, and clearer environment variable usage.
+*   **PHP Container Stability & Cloudflare Compatibility:** Resolved various issues related to PHP container restarts, file permissions, Cloudflare Tunnel integration (ensuring correct HTTPS operation and no mixed content), and WordPress table prefix sanitization, leading to a much more stable and robust experience from first run.
 
 ---
 
@@ -340,7 +341,7 @@ Common commands:
         5.  **Configure DNS:** CNAME record in Cloudflare DNS (e.g., `mysite.yourdomain.com` to `<YOUR_TUNNEL_UUID>.cfargotunnel.com`).
         6.  **Route Traffic:** `cloudflared tunnel route dns my-tunnel-name mysite.yourdomain.com`.
         7.  **Run Tunnel:**
-            ```bash
+    ```bash
             cloudflared tunnel run --url https://localhost:${TRAEFIK_HTTPS_PORT:-443} my-tunnel-name
             ```
             (Ensure `TRAEFIK_HTTPS_PORT` in `.env` is correct. Replace `my-tunnel-name`.)
