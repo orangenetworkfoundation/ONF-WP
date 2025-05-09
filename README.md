@@ -488,7 +488,7 @@ Our focus is on creating and promoting **"Made in India, Made for the World"** o
 
 Our Mission: To reduce complexity in technology and make real-world, production-ready solutions accessible to the mass public – including students, developers, small businesses, and lifelong learners. We aim to empower individuals and communities through practical, reliable, and open-source software.
 
-ONF-WP is a testament to this mission, designed to simplify a crucial part of the web development workflow. Special thanks to Hon. Col. Parvati Jangid, President of Orange Network Foundation, for this initiative.
+ONF-WP is a testament to this mission, designed to simplify a crucial part of the web development workflow. Special thanks to **[Hon. Col. Parvati Jangid](https://www.facebook.com/officialparvati/)**, President of Orange Network Foundation, for this initiative.
 
 Find out more about our initiatives: [Orange Network Foundation Official Website](https://orangenetwork.foundation).
 
