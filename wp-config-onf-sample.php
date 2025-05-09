@@ -44,7 +44,21 @@ define('NONCE_SALT',       'put your unique phrase here');
  * WordPress database table prefix.
  */
 // Pulled from environment variable set in docker-compose.yml
-$table_prefix = getenv('WORDPRESS_TABLE_PREFIX') ?: 'wp_';
+$raw_table_prefix = getenv('WORDPRESS_TABLE_PREFIX');
+if ($raw_table_prefix) {
+    // Sanitize by replacing hyphens (and other common problematic chars if needed, but hyphen is the current issue)
+    // with underscores. Ensure it ends with an underscore if not already.
+    $sanitized_prefix = str_replace('-', '_', $raw_table_prefix);
+    // Remove any other non-alphanumeric characters except underscore
+    $sanitized_prefix = preg_replace('/[^a-zA-Z0-9_]/', '', $sanitized_prefix);
+    // Ensure it ends with an underscore
+    if (substr($sanitized_prefix, -1) !== '_') {
+        $sanitized_prefix .= '_';
+    }
+    $table_prefix = $sanitized_prefix;
+} else {
+    $table_prefix = 'wp_'; // Default if no env var is set
+}
 
 /**
  * For developers: WordPress debugging mode.
@@ -57,10 +71,14 @@ define( 'WP_DEBUG', false );
 // Handles HTTPS termination at proxies like Cloudflare Tunnel + Traefik
 // Relies on PROJECT_DOMAIN being passed as an environment variable to the PHP container.
 $project_domain_env = getenv('PROJECT_DOMAIN');
+$project_https_port_env = getenv('TRAEFIK_HTTPS_PORT'); // This is still useful for the $_SERVER[HTTPS] block later
+
+$site_protocol = 'https'; // Cloudflare Tunnel means user sees HTTPS, so WP URLs should be HTTPS.
+$site_host = $project_domain_env;
 
 if ($project_domain_env) {
-    define('WP_HOME', 'https://' . $project_domain_env);
-    define('WP_SITEURL', 'https://' . $project_domain_env);
+    define('WP_HOME', $site_protocol . '://' . $site_host ); // No port suffix needed as CF handles standard ports
+    define('WP_SITEURL', $site_protocol . '://' . $site_host ); // No port suffix needed
 } else {
     // Fallback if PROJECT_DOMAIN is somehow not set (should come from .env via docker-compose)
     // Ensure PROJECT_DOMAIN is in your .env and passed to the php service environment
@@ -71,13 +89,12 @@ if ($project_domain_env) {
 
 // Ensure WordPress interprets the connection as HTTPS
 // This is crucial when SSL is terminated at the proxy.
-if (defined('WP_SITEURL') && strpos(WP_SITEURL, 'https://') === 0) {
-    // Force HTTPS detection based on the defined SITEURL
+// The HTTP_X_FORWARDED_PROTO check becomes primary here.
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos(strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']), 'https') !== false) {
     $_SERVER['HTTPS'] = 'on';
 }
-// As a secondary check, trust the X-Forwarded-Proto header if present
-// This is useful if the above didn't trigger and the header exists
-elseif (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos(strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']), 'https') !== false) {
+// Fallback for direct HTTPS access if WP_SITEURL was https (less likely with Cloudflare Tunnel)
+elseif (defined('WP_SITEURL') && strpos(WP_SITEURL, 'https://') === 0) {
     $_SERVER['HTTPS'] = 'on';
 }
 // --- End ONF WP HTTPS Configuration ---
