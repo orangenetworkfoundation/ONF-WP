@@ -52,6 +52,8 @@ services:
       - ./wordpress:/var/www/html:cached # Mount new 'wordpress' directory for WordPress files
       # Mount the entrypoint script to a standard bin location
       - ./onf-wp-entrypoint.sh:/usr/local/bin/onf-wp-entrypoint.sh:ro
+      # Mount the sample wp-config from project root to where the entrypoint expects it
+      - ./wp-config-onf-sample.php:/var/www/html/wp-config-onf-sample.php:ro
 
   nginx:
     image: wodby/nginx:latest # Wodby's overall latest stable Nginx

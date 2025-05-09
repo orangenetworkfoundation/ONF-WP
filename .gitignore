@@ -5,13 +5,24 @@ wordpress/wp-config.php
 # The user should copy .env.example to .env and edit that.
 .env
 
-# WordPress Content & Uploads (Typically ignored in theme/plugin development)
-# Users might adjust this based on their workflow.
+# Ignore most of the WordPress installation directory, Docker will populate it.
+# We only want to track our sample config (in root) and custom themes/plugins within wp-content.
+/wordpress/*
+!/wordpress/wp-content/
+
+# WordPress Content - Within wp-content, ignore generated/managed content.
+# Users should commit their own themes, plugins, and mu-plugins here.
 /wordpress/wp-content/uploads/
 /wordpress/wp-content/upgrade/
 /wordpress/wp-content/backup-db/
 /wordpress/wp-content/backups/
 /wordpress/wp-content/cache/
+# Example ignores for default themes/plugins (users can add more specific ones or un-ignore if needed):
+/wordpress/wp-content/themes/twentytwentyfour/
+/wordpress/wp-content/themes/twentytwentythree/
+/wordpress/wp-content/themes/twentytwentytwo/
+/wordpress/wp-content/plugins/akismet/
+/wordpress/wp-content/plugins/hello.php
 
 # Docker & System Files
 .docker/
