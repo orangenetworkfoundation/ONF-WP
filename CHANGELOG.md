@@ -8,12 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.2] - 2025-05-09
 
 ### Changed
-- WordPress core files are now installed into and served from a `./wordpress/` subdirectory instead of the project root.
-  - Updated `docker-compose.yml` volume mounts for `php`, `nginx`, and `crond` services.
-  - Relocated `wp-config-onf-sample.php` to `./wordpress/wp-config-onf-sample.php`.
-  - Updated PHP service entrypoint script path in `docker-compose.yml`.
-  - Updated `.gitignore` to reflect the new paths (e.g., `wordpress/wp-config.php`).
-- `README.md` updated to reflect the new `./wordpress/` directory structure and setup instructions.
+- **Project Structure & WordPress Installation:**
+  - WordPress core files are now installed into and served from a `./wordpress/` subdirectory instead of the project root, promoting a cleaner main directory.
+  - `wp-config-onf-sample.php` has been moved to the project root (from `./wordpress/`) for easier access and to prevent accidental deletion during volume cleanup. It is now mounted into the PHP container from the root.
+- **Configuration File Updates:**
+  - `docker-compose.yml`: Updated volume mounts for `php`, `nginx`, and `crond` services to use the `./wordpress/` subdirectory. Added mount for `wp-config-onf-sample.php` from the root. Entrypoint script path for PHP service confirmed.
+  - `.gitignore`: Updated to reflect the new paths and ensure `wp-config-onf-sample.php` (in root) is tracked, while its previous location (if any) and the generated `wordpress/wp-config.php` are ignored.
+- **Documentation Overhaul:**
+  - `README.md`: Received a complete rewrite and massive expansion. It's now structured based on AIDA (Attention, Interest, Desire, Action) principles, offering highly detailed installation, usage, troubleshooting, and "behind the scenes" sections. Information about the Orange Network Foundation is also included, along with improved formatting and badges.
+  - `ONF-vs-competitors.md`: Updated to align with the final project structure and features.
 
 ## [1.0.1] - 2025-05-08
 
