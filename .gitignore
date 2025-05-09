@@ -1,17 +1,17 @@
 # WordPress Core Files & Sensitive Config
 # Ignore the generated wp-config.php to prevent committing secret keys.
-wp-config.php
+wordpress/wp-config.php
 # Ignore the user's specific .env file to prevent committing custom domains/ports/secrets.
 # The user should copy .env.example to .env and edit that.
 .env
 
 # WordPress Content & Uploads (Typically ignored in theme/plugin development)
 # Users might adjust this based on their workflow.
-/wp-content/uploads/
-/wp-content/upgrade/
-/wp-content/backup-db/
-/wp-content/backups/
-/wp-content/cache/
+/wordpress/wp-content/uploads/
+/wordpress/wp-content/upgrade/
+/wordpress/wp-content/backup-db/
+/wordpress/wp-content/backups/
+/wordpress/wp-content/cache/
 
 # Docker & System Files
 .docker/

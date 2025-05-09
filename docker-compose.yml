@@ -26,7 +26,7 @@ services:
     container_name: "${COMPOSE_PROJECT_NAME}_php"
     # Override entrypoint to run our setup script first
     # The script should end with `exec "$@"` to run the original command
-    entrypoint: ["/var/www/html/onf-wp-entrypoint.sh"]
+    entrypoint: ["/usr/local/bin/onf-wp-entrypoint.sh"]
     # The default command from wodby/wordpress image will be passed as arguments to the entrypoint
     # Ensure the script is executable (Docker usually handles this for entrypoints)
     restart: unless-stopped
@@ -49,9 +49,9 @@ services:
       WORDPRESS_HOME_URL: "https://${PROJECT_DOMAIN}" # For getenv('WORDPRESS_HOME_URL') (consistency)
       WORDPRESS_TRUST_X_FORWARDED_PROTO: "true" # Still good practice
     volumes:
-      - ./:/var/www/html:cached # Mount current directory (project root) for WordPress files
-      # Mount the entrypoint script (ensure it's executable on host or via Docker)
-      - ./onf-wp-entrypoint.sh:/var/www/html/onf-wp-entrypoint.sh:ro
+      - ./wordpress:/var/www/html:cached # Mount new 'wordpress' directory for WordPress files
+      # Mount the entrypoint script to a standard bin location
+      - ./onf-wp-entrypoint.sh:/usr/local/bin/onf-wp-entrypoint.sh:ro
 
   nginx:
     image: wodby/nginx:latest # Wodby's overall latest stable Nginx
@@ -64,7 +64,7 @@ services:
       NGINX_BACKEND_HOST: php # PHP-FPM service name
       NGINX_SERVER_ROOT: /var/www/html # Document root, matches PHP's volume mount
     volumes:
-      - ./:/var/www/html:cached # Nginx also needs access to static files
+      - ./wordpress:/var/www/html:cached # Nginx also needs access to WordPress static files
     labels:
       - "traefik.enable=true"
       # Explicitly define router and service for Nginx via Traefik
@@ -88,7 +88,7 @@ services:
       DB_USER: "${COMPOSE_PROJECT_NAME:-onf_wp_user}"
       DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME:-onf_wp_user}"
     volumes:
-      - ./:/var/www/html:cached # Mount the WordPress codebase for wp-cli access
+      - ./wordpress:/var/www/html:cached # Mount the WordPress codebase for wp-cli access
     command: sudo crond -f -L /dev/stdout # Run crond in foreground, log to Docker logs
 
   adminer:
