@@ -1,8 +1,8 @@
-# ONF-WP: Your ⚡ Lightning-Fast, 🔒 Secure, Local WordPress Playground! (v1.0.2)
+# ONF-WP: Your ⚡ Lightning-Fast, 🔒 Secure, Local WordPress Playground! (v1.0.3)
 
 <!-- Badges -->
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.0.2-blue.svg" alt="Version 1.0.2">
+  <img src="https://img.shields.io/badge/Version-1.0.3-blue.svg" alt="Version 1.0.3">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Powered%20by-Docker-blue.svg?logo=docker" alt="Powered by Docker">
   <img src="https://img.shields.io/badge/WordPress-Latest%20Stable-brightgreen.svg?logo=wordpress" alt="WordPress Latest Stable">
@@ -102,12 +102,15 @@ While various tools for local WordPress development exist (e.g., Local by Flywhe
 
 ---
 
-## 🌟 What's New in v1.0.2? (Key Enhancements)
+## 🌟 What's New in v1.0.3? (Key Enhancements)
 
-*   **Cleaner Project Root:** WordPress core files are now in `./wordpress/`, making the project root easier to navigate.
-*   **Safer Sample Config:** `wp-config-onf-sample.php` is now in the project root, reducing the risk of accidental deletion with volume cleanup and making it more accessible.
-*   **Refined `.gitignore`:** More comprehensive rules for a cleaner repository.
-*   **Upgraded Documentation:** This `README.md` and the `ONF-vs-competitors.md` file have been significantly updated for clarity and detail.
+*   **Standard WordPress 5-Minute Install:** Setup now uses the classic WordPress web-based installation for admin user creation, offering a familiar experience.
+*   **Dedicated WP-CLI Service:** A new `wpcli` service is included for easy command-line management of your WordPress site using `docker-compose exec wpcli wp <command>`.
+*   **Full Traefik HTTPS Termination:** Traefik now handles HTTPS directly for your project domain (`https://<your-PROJECT_DOMAIN>`), including HTTP to HTTPS redirection.
+*   **Enhanced `.env.example`:** Now includes the critical `COMPOSE_PROJECT_NAME` (essential for unique project setups), `TRAEFIK_HTTPS_PORT`, and optional `MARIADB_PORT_FORWARD`.
+*   **Adminer Access Documented:** Guidance on accessing the Adminer database management tool.
+*   **Clearer Path Descriptions:** Updated explanations for file paths within the Docker containers.
+*   **Improved `docker-compose.yml`:** More robust service definitions, unique volume naming, and clearer environment variable usage.
 
 ---
 
@@ -191,24 +194,17 @@ Customize ONF-WP for your project using the `.env` file for environment variable
         *   Terminal: `cp .env.example .env` (macOS/Linux) or `copy .env.example .env` (Windows).
     2.  Open the new `.env` file in your code editor.
     3.  **Crucial! Update `COMPOSE_PROJECT_NAME`:**
-        *   **Why?** This **must be unique** for each ONF-WP instance on your machine to prevent conflicts (this is how Docker keeps different ONF-WP sites separate and identifiable on your computer). Use lowercase letters, numbers, and no spaces (e.g., `myproject`, `client1`).
+        *   **Why?** This **must be unique** for each ONF-WP instance on your machine to prevent conflicts (this is how Docker keeps different ONF-WP sites separate and identifiable on your computer). It directly sets your database name and user.
         *   **Example:** `COMPOSE_PROJECT_NAME=myfirstsite`
     4.  **Review/Update `PROJECT_DOMAIN` (Your Local Site Address):**
-        *   **Why?** Sets the local domain for your WordPress site (e.g., `myfirstsite.onfwp.test`).
-        *   **Recommendation:** Stick to `.onfwp.test`, `.localhost`, or `.test` suffixes to avoid conflicts with real domains. Ensure it's unique if running multiple sites.
+        *   **Why?** Sets the local domain for your WordPress site (e.g., `myfirstsite.onfwp.test`). This will be accessible via `https://<PROJECT_DOMAIN>`. Ensure this is unique if running multiple sites.
         *   **Example:** `PROJECT_DOMAIN=myfirstsite.onfwp.test`
-    5.  **Configure `WP_ADMIN_USER`, `WP_ADMIN_PASSWORD`, `WP_ADMIN_EMAIL` (Your WordPress Admin):**
-        *   **Why?** Credentials for the WordPress administrator account created on first setup.
-        *   **CRITICAL:** **Use a STRONG, UNIQUE password for `WP_ADMIN_PASSWORD`.**
-        *   **Example:**
-            ```env
-            WP_ADMIN_USER=adminuser
-            WP_ADMIN_PASSWORD=Str0ng!P@sswOrd$
-            WP_ADMIN_EMAIL=user@example.com
-            ```
-    6.  **Review `TRAEFIK_HTTP_PORT`, `TRAEFIK_HTTPS_PORT`, `TRAEFIK_WEBUI_PORT` (Advanced):**
-        *   **Why?** Ports Traefik uses on your host. Defaults: `80` (HTTP), `443` (HTTPS), `8080` (Traefik Dashboard).
-        *   **When to change?** Only if these ports are in use by another application. If changed, include the new port in your browser URL (e.g., `http://myfirstsite.onfwp.test:8000`).
+    5.  **Review `TRAEFIK_HTTP_PORT`, `TRAEFIK_HTTPS_PORT`, `TRAEFIK_WEBUI_PORT` (Advanced):**
+        *   **Why?** Ports Traefik uses on your host. Defaults: `8000` (HTTP), `8443` (HTTPS), `8081` (Traefik Dashboard).
+        *   **When to change?** Only if these ports are in use by another application. If changed, include the new port in your browser URL (e.g., `https://myfirstsite.onfwp.test:8443`).
+    6.  **Review `MARIADB_PORT_FORWARD` (Optional):**
+        *   **Why?** If you want to connect to the MariaDB database directly from your host machine (e.g., with a database GUI tool), uncomment this line in `.env` and optionally change the port number. You also need to uncomment the corresponding `ports` section in `docker-compose.yml` for the `mariadb` service.
+        *   **Example:** `MARIADB_PORT_FORWARD=33061`
     7.  **Save the `.env` file.**
 
 **Step 3: Start ONF-WP with Docker Compose**
@@ -239,18 +235,26 @@ Docker Compose will read your configuration and start the services.
 
 Once `docker-compose up -d` completes:
 
-*   **Access Your WordPress Site:**
-    *   Open your browser to your `PROJECT_DOMAIN` (e.g., `https://myfirstsite.onfwp.test`).
-    *   **HTTPS Note:** Expect a browser warning ("untrusted certificate"/"connection not private"). This is **NORMAL** due to the self-signed SSL certificate for local HTTPS. Click "Advanced" and "Proceed..." or equivalent. This is safe for local development.
-    *   You should see the WordPress installation screen or your site (our script handles initial setup using `.env` admin credentials).
+*   **Access Your WordPress Site & Complete Installation:**
+    *   Open your browser to your `PROJECT_DOMAIN` (e.g., `https://myfirstsite.onfwp.test` - note it should automatically use HTTPS if you used the default Traefik ports, or redirect to it). Due to the new HTTPS setup, your browser will show a security warning because Traefik uses a self-signed SSL certificate for local development. This is **NORMAL** and **EXPECTED**. Click "Advanced" and "Proceed to [your domain] (unsafe)" or the equivalent for your browser. This is safe for local development.
+    *   You should now see the **WordPress Installation Screen** (the famous "5-minute install").
+    *   Select your language and click "Continue".
+    *   On the next screen, fill in:
+        *   **Site Title:** Your desired site title.
+        *   **Username:** Your desired WordPress administrator username.
+        *   **Password:** A strong password for your admin account.
+        *   **Your Email:** Your email address.
+        *   **Search engine visibility:** Check or uncheck as desired for a local site.
+    *   Click "Install WordPress".
+    *   Once done, you can log in with the credentials you just created.
 
 *   **Access WordPress Admin:**
     *   Go to `https://<your-PROJECT_DOMAIN>/wp-admin/`.
-    *   Log in with `WP_ADMIN_USER` and `WP_ADMIN_PASSWORD` from `.env`.
+    *   Log in with the admin username and password you created during the 5-minute install.
 
 *   **Access Traefik Dashboard (Optional):**
     *   Shows Traefik status and managed services.
-    *   Go to `http://localhost:<TRAEFIK_WEBUI_PORT>` (e.g., `http://localhost:8080`).
+    *   Go to `http://localhost:<TRAEFIK_WEBUI_PORT>` (e.g., `http://localhost:8081`).
 
 🎉 **Setup Complete! You have a functional, HTTPS-enabled, local WordPress site with ONF-WP.** 🎉
 
@@ -282,14 +286,14 @@ Common commands:
     *   **What it does:** Shows service output. Press `Ctrl+C` to stop.
 
 *   **Access WP-CLI (WordPress Command Line):**
-    *   Format: `docker-compose exec wpcli wp <your-wp-cli-command>`
-    *   **What it does:** Allows you to run any WP-CLI command directly against your WordPress site.
+    *   **Format:** `docker-compose exec wpcli wp <your-wp-cli-command>`
+    *   **What it does:** Allows you to run any [WP-CLI](https://wp-cli.org/) command directly against your WordPress site. The `wpcli` service is specifically configured for this.
     *   **Examples:**
         *   `docker-compose exec wpcli wp plugin list`
-        *   `docker-compose exec wpcli wp plugin install jetpack --activate`
+        *   `docker-compose exec wpcli wp theme status`
         *   `docker-compose exec wpcli wp core update`
-        *   `docker-compose exec wpcli wp core update-db`
-    *   **Benefit:** Powerful for managing WordPress.
+        *   `docker-compose exec wpcli wp user list`
+    *   **Benefit:** Powerful for managing WordPress, theme/plugin development, and automation.
 
 ### 🗂️ Developing Your Theme/Plugins: Code Location
 
@@ -300,22 +304,18 @@ Common commands:
 
 ### 🔩 Advanced Usage & Customization
 
-*   **Accessing the Database Directly:**
-    *   MariaDB port isn't exposed by default.
-    *   **To expose (for GUI tool like TablePlus, DBeaver):**
-        1.  Open `docker-compose.yml`.
-        2.  Find the `db` service.
-        3.  Uncomment or add the `ports` section:
-            ```yaml
-            services:
-              db:
-                # ... other db config ...
-                ports:
-                  - "${MARIADB_PORT_FORWARD:-3306}:3306" # Exposes DB port 3306
-            ```
-        4.  Optional: Add `MARIADB_PORT_FORWARD=your_host_port` to `.env` for a host port other than `3306`.
-        5.  Run `docker-compose up -d` to apply.
-        6.  **Connection Details:** Host: `127.0.0.1`; Port: exposed host port (e.g., `3306`); User/Password/Database: `wordpress` (from `docker-compose.yml` `db` service environment).
+*   **Accessing the Database Directly (Adminer & GUI Tools):**
+    *   **Adminer (Web GUI):** ONF-WP includes Adminer, a lightweight database management tool. Access it via `http://db.<your-PROJECT_DOMAIN>` (e.g., `http://db.myfirstsite.onfwp.test` if your `PROJECT_DOMAIN` is `myfirstsite.onfwp.test`). 
+        *   Server: `mariadb`
+        *   Username: Your `${COMPOSE_PROJECT_NAME}` value from `.env`
+        *   Password: `localdevpassword_for_${COMPOSE_PROJECT_NAME}`
+        *   Database: Your `${COMPOSE_PROJECT_NAME}` value from `.env`
+    *   **External GUI Tools (e.g., TablePlus, DBeaver):** MariaDB port isn't exposed by default.
+        *   **To expose:** 
+            1. Uncomment `MARIADB_PORT_FORWARD` in your `.env` file and set a desired host port (e.g., `33061`).
+            2. Open `docker-compose.yml`, find the `mariadb` service, and uncomment its `ports` section.
+            3. Run `docker-compose up -d` again to apply changes.
+            4. **Connection Details:** Host: `127.0.0.1`; Port: the host port you exposed (e.g., `33061`); User: `${COMPOSE_PROJECT_NAME}`; Password: `localdevpassword_for_${COMPOSE_PROJECT_NAME}`; Database: `${COMPOSE_PROJECT_NAME}`.
 
 *   **Modifying PHP/Nginx Configurations:**
     *   Based on Wodby Docker images.
@@ -375,15 +375,16 @@ Common commands:
 
 ONF-WP components work together:
 
-1.  **`docker-compose.yml`:** Defines services (PHP, Nginx, [MariaDB](https://mariadb.org/), [Traefik](https://traefik.io/traefik/), [WP-CLI](https://wp-cli.org/)), images, environment variables, networks, volume mounts. The environment blueprint.
+1.  **`docker-compose.yml`:** Defines services (PHP, Nginx, [MariaDB](https://mariadb.org/), [Traefik](https://traefik.io/traefik/), [WP-CLI](https://wp-cli.org/), Adminer, Crond), images, environment variables, networks, volume mounts. The environment blueprint.
 2.  **`.env` File:** Project-specific configuration for `docker-compose.yml`. **Key for running multiple ONF-WP projects: unique `COMPOSE_PROJECT_NAME` and `PROJECT_DOMAIN` for each.**
-3.  **Traefik (Reverse Proxy):** Entry point for web traffic. Reads [Docker](https://www.docker.com/) labels to route to WordPress. Generates self-signed SSL. Web UI (default: `http://localhost:8080`).
-4.  **PHP Service (`php`):** Runs WordPress (Wodby PHP-FPM image). Uses `onf-wp-entrypoint.sh`. Mounts `./wordpress:/var/www/html/wordpress:cached`, `./onf-wp-entrypoint.sh`, `./wp-config-onf-sample.php`.
-5.  **`onf-wp-entrypoint.sh` (Setup Script):** Runs on `php` container start. Checks for WP install. If none, downloads core, sets up `wp-config.php` (from sample and `.env`), injects unique security keys and salts (randomized strings that improve security for login sessions and cookies), optionally runs WP-CLI install. Ensures permissions. Executes original Wodby image command.
-6.  **Nginx Service (`nginx`):** Wodby Nginx image (serves PHP via PHP-FPM). Mounts `./wordpress:/var/www/html/wordpress:cached` for static assets. `NGINX_SERVER_ROOT` is `/var/www/html/wordpress`.
-7.  **MariaDB Service (`mariadb`):** Database server. Data stored in named Docker volume (`db_data_${COMPOSE_PROJECT_NAME}`), persists `docker-compose down` (unless `-v` used).
-8.  **WP-CLI Service (`wpcli`):**
-    *   A lightweight container with WP-CLI installed, configured to connect to your WordPress installation running in the `php` service and its `mariadb` database.
+3.  **Traefik (Reverse Proxy):** Entry point for web traffic. Reads [Docker](https://www.docker.com/) labels to route to WordPress (via Nginx). Generates self-signed SSL certificates for HTTPS on your `PROJECT_DOMAIN` and handles HTTP to HTTPS redirection. Web UI (default: `http://localhost:8081`).
+4.  **PHP Service (`php`):** Runs WordPress (Wodby PHP-FPM image). Uses `onf-wp-entrypoint.sh`. Mounts `./wordpress:/var/www/html:cached` (WordPress files reside directly in `/var/www/html` inside the container), `./onf-wp-entrypoint.sh`, `./wp-config-onf-sample.php`.
+5.  **`onf-wp-entrypoint.sh` (Setup Script):** Runs on `php` container start. Checks for WP install. If `wp-config.php` is missing, it copies `wp-config-onf-sample.php` and injects unique security keys and salts (randomized strings that improve security for login sessions and cookies). It does *not* perform the WordPress core installation (site title, admin user setup); that is done by the user via the web browser (5-minute install). Ensures permissions. Executes original Wodby image command.
+6.  **Nginx Service (`nginx`):** Wodby Nginx image (serves PHP via PHP-FPM). Mounts `./wordpress:/var/www/html:cached` for static assets. `NGINX_SERVER_ROOT` is `/var/www/html`.
+7.  **MariaDB Service (`mariadb`):** Database server. Data stored in named Docker volume (`mariadb_data_${COMPOSE_PROJECT_NAME}`), persists `docker-compose down` (unless `-v` used).
+8.  **WP-CLI Service (`wpcli`):** A dedicated container running the official `wordpress:cli` image, allowing direct `wp` command execution against your site via `docker-compose exec wpcli wp ...`.
+9.  **Adminer Service (`adminer`):** Provides a web-based GUI for database management, accessible via `http://db.<PROJECT_DOMAIN>`.
+10. **Crond Service (`crond`):** Runs WordPress cron tasks (`wp cron event run`) on a schedule using a WordPress image with WP-CLI.
 
 ---
 
