@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2025-05-09
+
+### Changed
+- WordPress core files are now installed into and served from a `./wordpress/` subdirectory instead of the project root.
+  - Updated `docker-compose.yml` volume mounts for `php`, `nginx`, and `crond` services.
+  - Relocated `wp-config-onf-sample.php` to `./wordpress/wp-config-onf-sample.php`.
+  - Updated PHP service entrypoint script path in `docker-compose.yml`.
+  - Updated `.gitignore` to reflect the new paths (e.g., `wordpress/wp-config.php`).
+- `README.md` updated to reflect the new `./wordpress/` directory structure and setup instructions.
+
 ## [1.0.1] - 2025-05-08
 
 ### Added
