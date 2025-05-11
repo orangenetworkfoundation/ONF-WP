@@ -5,7 +5,7 @@ ARG WODBY_WORDPRESS_TAG=latest
 FROM wodby/wordpress:${WODBY_WORDPRESS_TAG}
 
 ENV LANG="C.UTF-8"
-ENV ONF_WP_VERSION="1.0.4"
+ENV ONF_WP_VERSION="1.0.4" # You can update this if you make a 1.0.4.1 or similar for this tweak
 
 # Copy custom entrypoint and wp-config sample.
 # CRITICAL: Ensure onf-wp-entrypoint.sh in your Git repository & build context has LF line endings.
@@ -45,6 +45,7 @@ RUN \
         echo "memory_limit = 256M"; \
         echo "max_execution_time = 300"; \
         echo "max_input_time = 300"; \
+        echo "max_input_vars = 3000"; # Increased from default 1000
         echo "cgi.fix_pathinfo = 0"; \
         echo "date.timezone = UTC"; \
     } > /usr/local/etc/php/conf.d/onf-wp-settings.ini && \
