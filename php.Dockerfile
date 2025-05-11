@@ -5,7 +5,7 @@ ARG WODBY_WORDPRESS_TAG=latest
 FROM wodby/wordpress:${WODBY_WORDPRESS_TAG}
 
 ENV LANG="C.UTF-8"
-ENV ONF_WP_VERSION="1.0.4" # You can update this if you make a 1.0.4.1 or similar for this tweak
+ENV ONF_WP_VERSION="1.0.4"
 
 # Copy custom entrypoint and wp-config sample.
 # CRITICAL: Ensure onf-wp-entrypoint.sh in your Git repository & build context has LF line endings.
@@ -18,6 +18,9 @@ USER root
 #    Attempt to install dos2unix or use sed as a fallback.
 # 2. Create custom PHP INI settings for ONF-WP.
 RUN \
+    set -e; \
+    echo "ONF-WP Dockerfile: Preparing entrypoint script and PHP settings..."; \
+    \
     # Install dos2unix if possible (for robust line ending conversion)
     if command -v apt-get > /dev/null; then \
         apt-get update && apt-get install -y dos2unix && apt-get clean; \
@@ -25,19 +28,19 @@ RUN \
         apk add --no-cache dos2unix; \
     else \
         echo "ONF-WP Dockerfile: apt-get or apk not found, cannot install dos2unix." >&2; \
-    fi && \
+    fi; \
+    \
     # Apply line ending conversion and make executable
     if command -v dos2unix > /dev/null; then \
         dos2unix /usr/local/bin/onf-wp-entrypoint.sh; \
     else \
         echo "ONF-WP Dockerfile: dos2unix not found, using sed for line endings on onf-wp-entrypoint.sh." >&2; \
         sed -i 's/\r$//' /usr/local/bin/onf-wp-entrypoint.sh; \
-    fi && \
-    chmod +x /usr/local/bin/onf-wp-entrypoint.sh && \
+    fi; \
+    chmod +x /usr/local/bin/onf-wp-entrypoint.sh; \
     \
     # Create ONF-WP specific PHP settings to override defaults
-    # These settings are generally more WordPress development friendly.
-    echo "ONF-WP Dockerfile: Applying custom PHP settings..." && \
+    echo "ONF-WP Dockerfile: Applying custom PHP settings to /usr/local/etc/php/conf.d/onf-wp-settings.ini..."; \
     { \
         echo "; ONF-WP Custom PHP Settings (v${ONF_WP_VERSION})"; \
         echo "upload_max_filesize = 64M"; \
@@ -45,11 +48,12 @@ RUN \
         echo "memory_limit = 256M"; \
         echo "max_execution_time = 300"; \
         echo "max_input_time = 300"; \
-        echo "max_input_vars = 3000"; # Increased from default 1000
+        echo "max_input_vars = 3000"; \
         echo "cgi.fix_pathinfo = 0"; \
         echo "date.timezone = UTC"; \
-    } > /usr/local/etc/php/conf.d/onf-wp-settings.ini && \
-    echo "ONF-WP Dockerfile: Custom PHP settings applied to onf-wp-settings.ini"
+    } > /usr/local/etc/php/conf.d/onf-wp-settings.ini; \
+    \
+    echo "ONF-WP Dockerfile: Setup complete."
 
 # The Wodby entrypoint script (called by our script) will handle
 # the final user switch to 'wodby' before exec'ing php-fpm.
