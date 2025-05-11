@@ -1,9 +1,6 @@
 # WordPress Core Files & Sensitive Config
 # Ignore the generated wp-config.php to prevent committing secret keys.
 wordpress/wp-config.php
-# Ignore the user's specific .env file to prevent committing custom domains/ports/secrets.
-# The user should copy .env.example to .env and edit that.
-.env
 
 # Ignore most of the WordPress installation directory, Docker will populate it.
 # We only want to track our sample config (in root) and custom themes/plugins within wp-content.

@@ -1,21 +1,21 @@
-# ONF WP 1.0.3 - Simple, Objective, Powerful Local WordPress Development
-# Project name derived from directory. Uses verified 'latest' tags. Includes Adminer.
+# ONF WP 1.0.4 - Docker Compose
+# Focus on PHP service update for permissions and Dockerfile integration.
 
 services:
   mariadb:
-    image: wodby/mariadb:11.4 # Wodby's latest build for the MariaDB 11.4 series
+    image: wodby/mariadb:11.4 # Pinned version, good.
     container_name: "${COMPOSE_PROJECT_NAME}_mariadb"
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
-      MYSQL_DATABASE: "${COMPOSE_PROJECT_NAME}" # Use COMPOSE_PROJECT_NAME directly
+      MYSQL_DATABASE: "${COMPOSE_PROJECT_NAME}"
       MYSQL_USER: "${COMPOSE_PROJECT_NAME}"
       MYSQL_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
       MYSQL_ROOT_PASSWORD: "localdevrootpassword_for_${COMPOSE_PROJECT_NAME}"
     volumes:
       - mariadb_data:/var/lib/mysql
-    # ports: # Uncomment to expose MariaDB to host (see MARIADB_PORT_FORWARD in .env)
-    #   - "${MARIADB_PORT_FORWARD:-3306}:3306"
+    # ports:
+    #   - "${MARIADB_PORT_FORWARD:-3306}:3306" # Uncomment for direct DB access
     healthcheck:
       test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "--user=${COMPOSE_PROJECT_NAME}", "--password=localdevpassword_for_${COMPOSE_PROJECT_NAME}"]
       interval: 10s
@@ -23,40 +23,49 @@ services:
       retries: 5
       start_period: 30s
 
-  php:
-    image: wodby/wordpress:latest # Wodby's overall latest stable WordPress (WP6 on recent PHP)
+  php: # MODIFIED FOR 1.0.4
+    build:
+      context: . # Build from the current directory
+      dockerfile: php.Dockerfile # Specify our new Dockerfile
+      args:
+        # Allows overriding Wodby image tag via .env if WODBY_PHP_IMAGE_TAG is set there.
+        # Defaults to 'latest' as defined in php.Dockerfile if not set.
+        WODBY_WORDPRESS_TAG: ${WODBY_PHP_IMAGE_TAG:-latest}
     container_name: "${COMPOSE_PROJECT_NAME}_php"
-    entrypoint: ["/usr/local/bin/onf-wp-entrypoint.sh"]
+    # ENTRYPOINT and CMD are now defined in php.Dockerfile
     restart: unless-stopped
     depends_on:
       mariadb:
         condition: service_healthy
     environment:
-      # DEBUG: "1" # Enable debug mode for Wodby scripts
-      COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME}" # Pass for wp-config and entrypoint if needed
-      TRAEFIK_HTTPS_PORT: "${TRAEFIK_HTTPS_PORT}" # Pass Traefik HTTPS port for correct URL generation
+      # Pass COMPOSE_PROJECT_NAME for entrypoint script and wp-config
+      COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME}"
+      # Pass Traefik HTTPS port for correct URL generation if needed by themes/plugins
+      TRAEFIK_HTTPS_PORT: "${TRAEFIK_HTTPS_PORT}"
       DB_HOST: mariadb
-      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_HOST: mariadb # For wp-config
       DB_NAME: "${COMPOSE_PROJECT_NAME}"
-      WORDPRESS_DB_NAME: "${COMPOSE_PROJECT_NAME}" # Ensure wp-config uses this if preferred
+      WORDPRESS_DB_NAME: "${COMPOSE_PROJECT_NAME}" # For wp-config
       DB_USER: "${COMPOSE_PROJECT_NAME}"
-      WORDPRESS_DB_USER: "${COMPOSE_PROJECT_NAME}" # Ensure wp-config uses this if preferred
+      WORDPRESS_DB_USER: "${COMPOSE_PROJECT_NAME}" # For wp-config
       DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
-      WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
-      PHP_FPM_USER: wodby
+      WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}" # For wp-config
+      PHP_FPM_USER: wodby # Informational, Wodby images run php-fpm as wodby
       PHP_FPM_GROUP: wodby
-      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Use full project name for prefix
-      PROJECT_DOMAIN: "${PROJECT_DOMAIN}"
-      WORDPRESS_SITE_URL: "https://${PROJECT_DOMAIN}"
-      WORDPRESS_HOME_URL: "https://${PROJECT_DOMAIN}"
-      WORDPRESS_TRUST_X_FORWARDED_PROTO: "true"
+      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # For wp-config
+      PROJECT_DOMAIN: "${PROJECT_DOMAIN}" # For wp-config
+      WORDPRESS_SITE_URL: "https://${PROJECT_DOMAIN}" # For wp-config
+      WORDPRESS_HOME_URL: "https://${PROJECT_DOMAIN}" # For wp-config
+      WORDPRESS_TRUST_X_FORWARDED_PROTO: "true" # For Cloudflare/proxy setups
     volumes:
+      # Mount host's ./wordpress directory to /var/www/html in the container.
+      # 'cached' can improve performance on macOS.
       - ./wordpress:/var/www/html:cached
-      - ./onf-wp-entrypoint.sh:/usr/local/bin/onf-wp-entrypoint.sh:ro
-      - ./wp-config-onf-sample.php:/var/www/html/wp-config-onf-sample.php:ro
+      # Removed volume mounts for entrypoint.sh and wp-config-onf-sample.php
+      # as they are now COPY'd into the image via php.Dockerfile.
 
   nginx:
-    image: wodby/nginx:latest
+    image: wodby/nginx:latest # As per project direction
     container_name: "${COMPOSE_PROJECT_NAME}_nginx"
     restart: unless-stopped
     depends_on:
@@ -64,50 +73,43 @@ services:
     environment:
       NGINX_VHOST_PRESET: wordpress
       NGINX_BACKEND_HOST: php
-      NGINX_SERVER_ROOT: /var/www/html
+      NGINX_SERVER_ROOT: /var/www/html # Nginx serves files from this path
     volumes:
-      - ./wordpress:/var/www/html:cached
+      - ./wordpress:/var/www/html:cached # Nginx also needs access to WP files
     labels:
       - "traefik.enable=true"
-      # HTTP Router (No longer redirects, serves directly)
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_http_router.rule=Host(`${PROJECT_DOMAIN}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_http_router.entrypoints=web"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_http_router.service=${COMPOSE_PROJECT_NAME}_nginx_service"
-      # HTTPS Router (Remains for direct access via HTTPS port if needed, or can be removed if CF is sole HTTPS source)
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.rule=Host(`${PROJECT_DOMAIN}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.tls=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_nginx_https_router.service=${COMPOSE_PROJECT_NAME}_nginx_service"
-      # Service definition (Nginx internal port)
       - "traefik.http.services.${COMPOSE_PROJECT_NAME}_nginx_service.loadbalancer.server.port=80"
 
   wpcli:
-    image: wordpress:cli # Official WordPress CLI image
+    image: wordpress:cli # Official WP-CLI image
     container_name: "${COMPOSE_PROJECT_NAME}_wpcli"
     depends_on:
       mariadb:
         condition: service_healthy
-      php: # Depends on PHP service for files and some env vars if not directly set
+      php: # Depends on PHP service for files and some env vars
         condition: service_started
     environment:
       WORDPRESS_DB_HOST: mariadb
       WORDPRESS_DB_NAME: "${COMPOSE_PROJECT_NAME}"
       WORDPRESS_DB_USER: "${COMPOSE_PROJECT_NAME}"
       WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
-      # WP-CLI needs to know the table prefix if it's custom
-      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Use full project name for prefix
+      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_"
     volumes:
       - ./wordpress:/var/www/html # Mount WordPress files
-    # Keep container running. User will exec into it.
-    command: tail -f /dev/null
-    # Or, for direct command execution (less common for persistent service):
-    # entrypoint: ["wp"]
+    command: tail -f /dev/null # Keep container running for exec
 
   crond:
-    image: wodby/wordpress:latest # Matches PHP service for WP-CLI compatibility
+    image: wodby/wordpress:latest # As per project direction, matches PHP base
     container_name: "${COMPOSE_PROJECT_NAME}_crond"
     init: true
-    entrypoint: ["sudo", "crond", "-f", "-L", "/dev/stdout"] # Bypass Wodby WP setup logic
+    entrypoint: ["sudo", "crond", "-f", "-L", "/dev/stdout"]
     restart: unless-stopped
     depends_on:
       mariadb:
@@ -118,20 +120,19 @@ services:
       CRONTAB_SCHEDULE: "0 * * * *"
       CRONTAB_COMMAND: "wp cron event run --due-now --path=/var/www/html"
       DB_HOST: mariadb
-      WORDPRESS_DB_HOST: mariadb # Explicit for clarity if wp-cli in this image uses it
+      WORDPRESS_DB_HOST: mariadb
       DB_NAME: "${COMPOSE_PROJECT_NAME}"
       WORDPRESS_DB_NAME: "${COMPOSE_PROJECT_NAME}"
       DB_USER: "${COMPOSE_PROJECT_NAME}"
       WORDPRESS_DB_USER: "${COMPOSE_PROJECT_NAME}"
       DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
       WORDPRESS_DB_PASSWORD: "localdevpassword_for_${COMPOSE_PROJECT_NAME}"
-      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_" # Use full project name for prefix
+      WORDPRESS_TABLE_PREFIX: "wp_${COMPOSE_PROJECT_NAME}_"
     volumes:
       - ./wordpress:/var/www/html:cached
-    # command: sudo crond -f -L /dev/stdout # This is now part of the entrypoint
 
   adminer:
-    image: wodby/adminer:latest
+    image: wodby/adminer:latest # As per project direction
     container_name: "${COMPOSE_PROJECT_NAME}_adminer"
     restart: unless-stopped
     environment:
@@ -141,12 +142,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_adminer_router.rule=Host(`db.${PROJECT_DOMAIN}`)"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_adminer_router.entrypoints=web" # Stays on HTTP for simplicity
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_adminer_router.entrypoints=web"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}_adminer_router.service=${COMPOSE_PROJECT_NAME}_adminer_service"
       - "traefik.http.services.${COMPOSE_PROJECT_NAME}_adminer_service.loadbalancer.server.port=80"
 
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.0 # Pinned version, good.
     container_name: "${COMPOSE_PROJECT_NAME}_traefik"
     restart: unless-stopped
     command:
@@ -154,17 +155,15 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443" # Define 'websecure' entrypoint for HTTPS
-      # For local dev, Traefik can generate self-signed certs by default for routers using TLS
-      # Or, provide your own certificates via dynamic config or static config if needed for real domains
+      - "--entrypoints.websecure.address=:443"
     ports:
       - "${TRAEFIK_HTTP_PORT}:80"
-      - "${TRAEFIK_HTTPS_PORT}:443" # Map HTTPS port from .env
+      - "${TRAEFIK_HTTPS_PORT}:443"
       - "${TRAEFIK_WEBUI_PORT}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   mariadb_data:
-    name: "mariadb_data_${COMPOSE_PROJECT_NAME}" # Ensure volume name is unique per project
+    name: "mariadb_data_${COMPOSE_PROJECT_NAME}" # Unique volume name
     driver: local

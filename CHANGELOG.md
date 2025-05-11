@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2025-05-11
+
+### Added
+- **`php.Dockerfile`:** Introduced a dedicated Dockerfile for the `php` service (`php.Dockerfile`). This allows for more robust image customization, including embedding PHP configuration overrides and ensuring script integrity.
+- **Embedded PHP Configuration Overrides:** The `php.Dockerfile` now creates a custom `onf-wp-settings.ini` within the image to set more development-friendly PHP defaults:
+    - `upload_max_filesize = 64M`
+    - `post_max_size = 72M`
+    - `memory_limit = 256M`
+    - `max_execution_time = 300`
+    - `max_input_time = 300`
+    - `cgi.fix_pathinfo = 0` (Common setting for Nginx + PHP-FPM)
+    - `date.timezone = UTC` (Ensures consistent timezone for PHP date functions)
+- **Entrypoint Script Line Ending Robustness:** The `php.Dockerfile` now includes steps to automatically convert `onf-wp-entrypoint.sh` line endings to LF (Unix-style) using `dos2unix` or `sed` during the image build process. This significantly improves cross-platform compatibility, especially for Windows users.
+
+### Changed
+- **PHP Service Build Process:** The `php` service in `docker-compose.yml` now uses the `build:` instruction to build its image from the new `php.Dockerfile` instead of directly pulling `wodby/wordpress:latest`. The Wodby image is still used as the `FROM` instruction in the `php.Dockerfile`.
+- **`onf-wp-entrypoint.sh` Permissions Strategy:**
+    - The script now runs as `root` (as defined by `USER root` before `ENTRYPOINT` in `php.Dockerfile`) to perform initial setup tasks.
+    - **Aggressive Permission Setting for Local Development:** Implemented a more comprehensive permission setting strategy to ensure WordPress (running as the `wodby` user via PHP-FPM) has write access to the entire `/var/www/html` directory and its contents from within the container. This includes:
+        - Attempting `chown -R wodby:wodby /var/www/html`.
+        - Applying `chmod 777` to all directories and `chmod 666` to all files within `/var/www/html`.
+        - Specifically ensuring `wp-config.php` is `666` to allow modifications by WordPress/plugins (e.g., for `WP_CACHE` definition by caching plugins).
+    - This aims to resolve issues with core file updates, plugin/theme installations, and media uploads directly from the WordPress admin, particularly on Docker Desktop for Windows/macOS where host/container permission mapping can be challenging.
+    - Enhanced the user guidance messages printed by the script regarding potential host-side permission adjustments if container-side changes are insufficient.
+- **`onf-wp-entrypoint.sh` Directory Creation:**
+    - Proactively creates `/var/www/html/wp-content/uploads/fonts` directory during initialization.
+- **`wp-config-onf-sample.php`:**
+    - Added `define( 'CONCATENATE_SCRIPTS', true );` (conditionally, if `SCRIPT_DEBUG` is not defined or is false) to align with WordPress defaults for admin area script loading.
+- **Docker Image Naming:** When building the PHP service, Docker Compose will now typically name the image based on the project directory (e.g., `yourproject-php`) rather than just relying on the Wodby image name directly for the PHP container.
+
+### Fixed
+- **WordPress Filesystem Permissions:**
+    - **Core File Writability:** WordPress should now report core directories and files as writable in Site Health, allowing for background updates and one-click core updates from the admin panel (provided host OS permissions allow the container's changes to take effect).
+    - **`wp-content` Subdirectory Writability:** Resolved issues where `uploads`, `plugins`, `themes`, `upgrade`, and `fonts` subdirectories within `wp-content` might not have been consistently writable by the PHP process. These are now robustly permissioned by the entrypoint script.
+    - Addressed the specific Site Health error "Some files are not writable by WordPress" by applying broader write permissions.
+- **PHP Resource Limits:** Previously restrictive defaults for `upload_max_filesize`, `post_max_size`, `memory_limit`, and `max_execution_time` have been increased, preventing common errors during theme/plugin uploads or larger operations.
+- **Entrypoint Script Execution Failures on Windows:** The "no such file or directory" error when trying to execute `onf-wp-entrypoint.sh` (often due to CRLF line endings) is now mitigated by the line ending conversion step in `php.Dockerfile`.
+- **"Unable to find user wodby" Docker Error:** Resolved by removing the explicit `USER wodby` instruction from the `php.Dockerfile`, allowing Wodby's own base image entrypoint scripts to correctly handle user setup and switching before starting PHP-FPM.
+
+### Removed
+- **Direct Volume Mounts for `onf-wp-entrypoint.sh` and `wp-config-onf-sample.php`:** These files are now `COPY`'d into the PHP service image via the `php.Dockerfile`, simplifying the `volumes` section in `docker-compose.yml` for the `php` service.
+
 ## [1.0.3] - 2025-05-09
 
 ### Changed

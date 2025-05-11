@@ -1,137 +1,152 @@
 #!/bin/sh
+# ONF-WP v1.0.4 Entrypoint Script
+# Runs as root to set up WordPress, then execs PHP-FPM (which runs as 'wodby').
+
 set -e # Exit immediately if a command exits with a non-zero status.
 
-WP_CONFIG_PATH="/var/www/html/wp-config.php"
-WP_CONFIG_SAMPLE_PATH="/var/www/html/wp-config-onf-sample.php"
+WP_ROOT="/var/www/html"
+WP_CONFIG_PATH="${WP_ROOT}/wp-config.php"
+WP_CONFIG_SAMPLE_PATH="/tmp/wp-config-onf-sample.php" # Copied by php.Dockerfile
+ONF_WP_VERSION_ENV=$(printenv ONF_WP_VERSION || echo "1.0.4") # Read from Dockerfile ENV
 
-# Only run setup if wp-config.php doesn't exist and the sample does
-if [ ! -f "${WP_CONFIG_PATH}" ] && [ -f "${WP_CONFIG_SAMPLE_PATH}" ]; then
-  echo "wp-config.php not found. Configuring from sample..."
+# --- Initial Sanity Checks (Running as root) ---
+if [ ! -d "${WP_ROOT}" ]; then
+    echo "ONF-WP ERROR: WordPress root ${WP_ROOT} (bind mount target) does not exist. Cannot proceed." >&2
+    exit 1
+fi
+if [ ! -f "${WP_CONFIG_SAMPLE_PATH}" ]; then
+    echo "ONF-WP ERROR: wp-config sample ${WP_CONFIG_SAMPLE_PATH} not found. Image may be misconfigured." >&2
+    exit 1
+fi
+echo "ONF-WP: Initializing WordPress environment in ${WP_ROOT} (v${ONF_WP_VERSION_ENV})..."
 
-  # Copy the sample file to wp-config.php
-  cp "${WP_CONFIG_SAMPLE_PATH}" "${WP_CONFIG_PATH}"
-  echo "Copied ${WP_CONFIG_SAMPLE_PATH} to ${WP_CONFIG_PATH}"
+# --- Configure wp-config.php (if it doesn't exist) ---
+if [ ! -f "${WP_CONFIG_PATH}" ]; then
+    echo "ONF-WP: wp-config.php not found. Creating from sample..."
+    cp "${WP_CONFIG_SAMPLE_PATH}" "${WP_CONFIG_PATH}"
+    if [ $? -ne 0 ]; then
+        echo "ONF-WP ERROR: Failed to copy sample wp-config.php to ${WP_CONFIG_PATH}." >&2
+        exit 1
+    fi
+    echo "ONF-WP: Copied ${WP_CONFIG_SAMPLE_PATH} to ${WP_CONFIG_PATH}."
 
-  # Fetch new salts from WordPress.org API
-  echo "Fetching new salts..."
-  # Ensure SALTS_OUTPUT is empty if curl fails, to prevent issues with awk
-  SALTS_OUTPUT=""
-  SALTS_OUTPUT=$(curl -fsS --connect-timeout 5 --retry 3 --retry-delay 2 https://api.wordpress.org/secret-key/1.1/salt/)
-  CURL_EXIT_CODE=$?
+    echo "ONF-WP: Fetching new security salts for wp-config.php..."
+    SALTS_OUTPUT=""
+    SALTS_OUTPUT=$(curl -fsS --connect-timeout 5 --retry 3 --retry-delay 2 https://api.wordpress.org/secret-key/1.1/salt/)
+    CURL_EXIT_CODE=$?
 
-  if [ ${CURL_EXIT_CODE} -ne 0 ] || [ -z "${SALTS_OUTPUT}" ]; then
-    echo "Error: Could not fetch salts from WordPress.org API (curl exit code: ${CURL_EXIT_CODE})." >&2
-    echo "Please ensure the container has internet access and the API is reachable." >&2
-    echo "Continuing without replacing salts - using placeholders (INSECURE)." >&2
-  else
-    echo "Fetched salts successfully."
-    # Use awk to replace the placeholder block with the fetched salts
-    # Ensure the salts variable is properly quoted for awk, especially if it could be multi-line
-    # The previous awk script had complex escaping for define('AUTH_KEY', which might be problematic.
-    # A simpler approach: use a unique delimiter string that won't appear in salts, and replace that block.
-    
-    # Create a temporary file with the salts
-    echo "${SALTS_OUTPUT}" > /tmp/salts.txt
-
-    # Use awk to read salts from the file and substitute the placeholder block
-    # This avoids complex variable expansion issues directly in the awk command line for the salts themselves.
-    # The placeholder block in wp-config-onf-sample.php starts with /**#@+ and ends with /**#@-*/
-    awk '
-      BEGIN { slurp = 0; replaced = 0 }
-      /\/\*\*#@\+\// { 
-        if (replaced == 0) { 
-          while ((getline salt_line < "/tmp/salts.txt") > 0) { print salt_line }; 
-          slurp = 1; replaced = 1; 
-        } else { print }
-      }
-      /\/\*\*#@-\*\// { slurp = 0; if (replaced == 1 && slurp == 0) { next } else { print } }
-      { if (slurp == 0) print }
-    ' "${WP_CONFIG_PATH}" > "${WP_CONFIG_PATH}.tmp"
-    
-    if [ $? -eq 0 ]; then
-      mv "${WP_CONFIG_PATH}.tmp" "${WP_CONFIG_PATH}"
-      if [ $? -eq 0 ]; then
-        echo "Replaced salt placeholders in ${WP_CONFIG_PATH}."
-      else
-        echo "Error: Failed to move temporary wp-config back (mv exit code: $?)." >&2
-        rm -f "${WP_CONFIG_PATH}.tmp" # Clean up temp file on error
-      fi
+    if [ ${CURL_EXIT_CODE} -eq 0 ] && [ -n "${SALTS_OUTPUT}" ]; then
+        echo "ONF-WP: Fetched salts successfully. Replacing placeholders in ${WP_CONFIG_PATH}."
+        echo "${SALTS_OUTPUT}" > /tmp/salts.txt
+        # Using awk for robust replacement
+        awk '
+          BEGIN { slurp = 0; replaced = 0 }
+          /\/\*\*#@\+\// {
+            if (replaced == 0) {
+              while ((getline salt_line < "/tmp/salts.txt") > 0) { print salt_line };
+              slurp = 1; replaced = 1;
+            } else { print }
+          }
+          /\/\*\*#@-\*\// { slurp = 0; if (replaced == 1 && slurp == 0) { next } else { print } }
+          { if (slurp == 0) print }
+        ' "${WP_CONFIG_PATH}" > "${WP_CONFIG_PATH}.tmp" && mv "${WP_CONFIG_PATH}.tmp" "${WP_CONFIG_PATH}" || \
+        echo "ONF-WP WARNING: Failed to replace salts in wp-config.php using awk. Default placeholders remain." >&2
+        rm -f /tmp/salts.txt
     else
-      echo "Error: awk command failed to process salts (awk exit code: $?)." >&2
-      rm -f "${WP_CONFIG_PATH}.tmp" # Clean up temp file on error
+        echo "ONF-WP WARNING: Could not fetch salts from WordPress.org API (curl exit code: ${CURL_EXIT_CODE}). Using default placeholders." >&2
     fi
-    rm -f /tmp/salts.txt # Clean up salts temp file
-  fi
-
-  # Set permissions appropriate for wodby user/group which runs php-fpm
-  chown wodby:wodby "${WP_CONFIG_PATH}"
-  chmod 640 "${WP_CONFIG_PATH}" # Restrict permissions slightly
-
-  echo "wp-config.php configured."
-
-  # Check if WordPress core files exist, if not, download them
-  # Specifically checking for wp-includes/version.php as a reliable indicator.
-  if [ ! -f "/var/www/html/wp-includes/version.php" ]; then
-    echo "WordPress core files not found in /var/www/html. Attempting to download..."
-    
-    # Attempt to download as wodby user first, then fallback to root if gosu or wp fails.
-    # Using --allow-root is generally needed if wp-cli is run as root.
-    # The Wodby image should have gosu and wp-cli available.
-    if false && gosu wodby php -d memory_limit=512M /usr/local/bin/wp core download --path="/var/www/html" --locale="en_US" --version="latest"; then # gosu was not found, so disabled for now
-      echo "WordPress core downloaded successfully as wodby user."
-    elif php -d memory_limit=512M /usr/local/bin/wp core download --path="/var/www/html" --locale="en_US" --version="latest" --allow-root; then
-      echo "WordPress core downloaded successfully as root user (using increased memory limit)."
-    else
-      echo "Error: Failed to download WordPress core using both wodby user and root." >&2
-      # Consider exiting if core download is critical and fails, or let Wodby entrypoint handle it.
-      # For now, we\'ll log the error and continue, Wodby entrypoint might have its own recovery or error.
-    fi
-    
-    # Attempt to set ownership to wodby:wodby
-    echo "Attempting to set ownership to wodby:wodby for /var/www/html..."
-    chown -R wodby:wodby /var/www/html || echo "Warning: chown on /var/www/html failed. This might lead to issues if PHP cannot write to necessary directories later (e.g., uploads)."
-
-    # Set permissions:
-    # Directories: rwxr-xr-x (755)
-    # Files: rw-r--r-- (644)
-    # This allows owner (ideally wodby, or root if chown failed) to read/write,
-    # and others (including the wodby group if wodby isn\'t owner) to read.
-    echo "Setting base permissions for /var/www/html (dirs 755, files 644)..."
-    find /var/www/html -type d -exec chmod 755 {} \;
-    find /var/www/html -type f -exec chmod 644 {} \;
-
-    # Secure wp-config.php specifically.
-    if [ -f "/var/www/html/wp-config.php" ]; then
-        echo "Securing wp-config.php (644)..."
-        chmod 644 /var/www/html/wp-config.php
-    fi
-  else
-    # If core files were already found, still ensure permissions are checked/set,
-    # as they might have been altered or be from an inconsistent state.
-    echo "WordPress core files found. Re-applying ownership and permissions for consistency..."
-    chown -R wodby:wodby /var/www/html || echo "Warning: chown on existing /var/www/html failed."
-    find /var/www/html -type d -exec chmod 755 {} \;
-    find /var/www/html -type f -exec chmod 644 {} \;
-    if [ -f "/var/www/html/wp-config.php" ]; then
-        chmod 644 /var/www/html/wp-config.php
-    fi
-  fi
-
-elif [ ! -f "${WP_CONFIG_PATH}" ] && [ ! -f "${WP_CONFIG_SAMPLE_PATH}" ]; then
-    echo "Warning: Neither wp-config.php nor wp-config-onf-sample.php found." >&2
-    echo "Proceeding with default image setup (may generate its own wp-config)." >&2
-elif [ -f "${WP_CONFIG_PATH}" ]; then
-    echo "wp-config.php already exists. Skipping configuration."
+    echo "ONF-WP: wp-config.php configured."
+else
+    echo "ONF-WP: wp-config.php already exists at ${WP_CONFIG_PATH}. Skipping configuration."
 fi
 
-# --- Execute Original Command ---
-# Modified: Instead of chaining to Wodby's full /docker-entrypoint.sh,
-# we attempt to directly execute the PHP-FPM process via its specific wrapper,
-# as Wodby's main entrypoint seems to complete its WordPress setup tasks
-# (like running init scripts from /docker-entrypoint-init.d/)
-# but the final exec to start PHP-FPM is what seems to be failing silently or causing a loop.
+# --- Ensure WordPress Core Files Exist (Download if necessary) ---
+if [ ! -f "${WP_ROOT}/wp-includes/version.php" ]; then
+    echo "ONF-WP: WordPress core files not found in ${WP_ROOT}. Attempting to download..."
+    if php -d memory_limit=512M /usr/local/bin/wp core download --path="${WP_ROOT}" --locale="en_US" --version="latest" --allow-root; then
+        echo "ONF-WP: WordPress core downloaded successfully."
+    else
+        echo "ONF-WP ERROR: Failed to download WordPress core. See WP-CLI errors above." >&2
+        echo "             Please check internet connection or manually place WordPress files in './wordpress' and restart." >&2
+    fi
+else
+    echo "ONF-WP: WordPress core files found in ${WP_ROOT}."
+fi
 
-echo "Attempting to directly start PHP-FPM via Wodby's docker-php-entrypoint..."
-# This assumes /usr/local/bin/docker-php-entrypoint is the script that ultimately starts php-fpm
-# and that php-fpm -F is the command to run it in foreground.
-exec /usr/local/bin/docker-php-entrypoint php-fpm -F 
+# --- Directory and Permission Adjustments (Still as root) ---
+echo "ONF-WP: Ensuring key wp-content directories exist..."
+mkdir -p \
+    "${WP_ROOT}/wp-content" \
+    "${WP_ROOT}/wp-content/themes" \
+    "${WP_ROOT}/wp-content/plugins" \
+    "${WP_ROOT}/wp-content/uploads" \
+    "${WP_ROOT}/wp-content/uploads/fonts" \
+    "${WP_ROOT}/wp-content/upgrade"
+
+echo "ONF-WP: Attempting to set ownership of ${WP_ROOT} to wodby:wodby..."
+# This chown is best-effort for bind mounts. Its success depends on host OS and Docker version.
+if chown -R wodby:wodby "${WP_ROOT}"; then
+    echo "ONF-WP: Ownership of ${WP_ROOT} preliminarily set to wodby:wodby."
+else
+    echo "ONF-WP WARNING: Failed to set full ownership of ${WP_ROOT} to wodby:wodby. This is common on Windows/macOS Docker Desktop due to host filesystem restrictions." >&2
+fi
+
+echo "ONF-WP: Applying development-friendly permissions to ${WP_ROOT} to enable WordPress self-management..."
+# For local development, make the entire WordPress installation writable by the PHP user (wodby)
+# from the container's perspective. This allows one-click updates, plugin/theme installs, etc.
+# These permissions are applied by root before PHP-FPM (as wodby) starts.
+
+# Set directories to 777: owner rwx, group rwx, other rwx (allows wodby user to write even if not owner/group)
+# Set files to 666: owner rw, group rw, other rw (allows wodby user to write even if not owner/group)
+# This is a pragmatic choice for local development ease on systems where UID/GID mapping is complex (Windows/macOS).
+find "${WP_ROOT}" -type d -exec chmod 777 {} \;
+find "${WP_ROOT}" -type f -exec chmod 666 {} \;
+
+# Ensure wp-config.php specifically is also writable by wodby (covered by 666 above),
+# but we can re-affirm ownership intent for clarity if needed, though chmod is key here.
+if [ -f "${WP_CONFIG_PATH}" ]; then
+    chown root:wodby "${WP_CONFIG_PATH}" 2>/dev/null || chown root "${WP_CONFIG_PATH}" 2>/dev/null || true # Best effort for group
+    chmod 666 "${WP_CONFIG_PATH}" || echo "ONF-WP WARNING: Could not set permissions for ${WP_CONFIG_PATH} to 666." >&2
+    echo "ONF-WP: Permissions for ${WP_CONFIG_PATH} set to allow writes by PHP user (wodby) for plugin compatibility (e.g. WP_CACHE)."
+fi
+
+# The broad 777/666 above should cover wp-content and its subdirectories.
+# The specific loop for wp-content subdirs from previous versions is now superseded by the global change.
+echo "ONF-WP: Development-friendly permissions applied."
+
+# --- User Guidance for Persistent Permission Issues ---
+# This message remains critical as host OS permissions are the ultimate arbiter for bind mounts.
+echo ""
+echo "#####################################################################################"
+echo "ONF-WP: WordPress setup preparation complete (v${ONF_WP_VERSION_ENV})."
+echo "PHP-FPM will now start as the 'wodby' user."
+echo ""
+echo "IF YOU STILL ENCOUNTER PERMISSION ERRORS with WordPress (e.g., cannot upload files, install plugins, or core updates fail):"
+echo "It means the 'wodby' user (running PHP) inside the container still doesn't have sufficient"
+echo "write access to your local './wordpress' directory (mounted as ${WP_ROOT})."
+echo "This is common with Docker Desktop on Windows/macOS due to how host file permissions are mapped and can override container settings."
+echo ""
+echo "To resolve this, you MUST adjust permissions on your HOST machine:"
+echo "  1. Stop this ONF-WP instance: docker-compose down"
+echo "  2. Open a terminal on your HOST computer."
+echo "  3. Navigate to your ONF-WP project directory (e.g., 'cd your-project-name')."
+echo "  4. Execute commands based on your HOST OS:"
+echo "     - For Linux:"
+echo "       sudo chown -R \$(id -u):\$(id -g) wordpress/"
+echo "       sudo find ./wordpress -type d -exec chmod 775 {} \; "
+echo "       sudo find ./wordpress -type f -exec chmod 664 {} \; "
+echo "       (If the 'wodby' user's ID in the container is 1000, you might use: sudo chown -R 1000:1000 wordpress/)"
+echo "     - For macOS / Windows (with Docker Desktop):"
+echo "       Ensure Docker Desktop's File Sharing settings allow access to your project path."
+echo "       You may also need to adjust permissions on the './wordpress' folder itself using"
+echo "       Finder (macOS) or File Explorer (Windows) to ensure your host user (and implicitly Docker)"
+echo "       has full read/write access. Often, granting 'Everyone' or your specific user"
+echo "       'Full Control' on the './wordpress' folder on the host is necessary for Docker bind mounts to be writable by the container user."
+echo "  5. Restart ONF-WP: docker-compose up -d --build --force-recreate"
+echo "Verifying host permissions is key for a smooth experience with bind mounts."
+echo "#####################################################################################"
+echo ""
+
+# --- Execute PHP-FPM ---
+echo "ONF-WP: Starting PHP-FPM as user 'wodby' via Wodby's entrypoint..."
+exec /usr/local/bin/docker-php-entrypoint php-fpm -F

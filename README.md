@@ -1,4 +1,4 @@
-# ONF-WP: Your ⚡ Lightning-Fast, 🔒 Secure, Local WordPress Playground! (v1.0.3)
+# ONF-WP: Your ⚡ Lightning-Fast, 🔒 Secure, Local WordPress Playground! (v1.0.4)
 
 <!-- Badges -->
 <p align="center">
@@ -102,18 +102,6 @@ While various tools for local WordPress development exist (e.g., Local by Flywhe
 
 ---
 
-## 🌟 What's New in v1.0.3? (Key Enhancements)
-
-*   **Standard WordPress 5-Minute Install:** Setup now uses the classic WordPress web-based installation for admin user creation, offering a familiar experience.
-*   **Dedicated WP-CLI Service:** A new `wpcli` service is included for easy command-line management of your WordPress site using `docker-compose exec wpcli wp <command>`.
-*   **Full Traefik HTTPS Termination:** Traefik now handles HTTPS directly for your project domain (`https://<your-PROJECT_DOMAIN>`), including HTTP to HTTPS redirection.
-*   **Enhanced `.env.example`:** Now includes the critical `COMPOSE_PROJECT_NAME` (essential for unique project setups), `TRAEFIK_HTTPS_PORT`, and optional `MARIADB_PORT_FORWARD`.
-*   **Adminer Access Documented:** Guidance on accessing the Adminer database management tool.
-*   **Clearer Path Descriptions:** Updated explanations for file paths within the Docker containers.
-*   **Improved `docker-compose.yml`:** More robust service definitions, unique volume naming, and clearer environment variable usage.
-*   **PHP Container Stability & Cloudflare Compatibility:** Resolved various issues related to PHP container restarts, file permissions, Cloudflare Tunnel integration (ensuring correct HTTPS operation and no mixed content), and WordPress table prefix sanitization, leading to a much more stable and robust experience from first run.
-
----
 
 ## 🚀 Let's Get Started: Step-by-Step Guide to ONF-WP Setup
 
